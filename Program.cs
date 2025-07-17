@@ -1,13 +1,14 @@
+using State_MachineAPI.Services;
+using State_MachineAPI.Models;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddSingleton<WorkflowService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -16,29 +17,35 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
 
-app.MapGet("/weatherforecast", () =>
+app.MapPost("/definitions", (WorkflowDefinition def, WorkflowService service) =>
 {
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
+    var (success, error) = service.AddDefinition(def);
+    return success ? Results.Ok("Definition created.") : Results.BadRequest(error);
+});
+
+app.MapGet("/definitions/{id}", (string id, WorkflowService service) =>
+{
+    var def = service.GetDefinition(id);
+    return def is not null ? Results.Ok(def) : Results.NotFound("Definition not found.");
+});
+
+app.MapPost("/instances", (string definitionId, WorkflowService service) =>
+{
+    var (success, error, instance) = service.StartInstance(definitionId);
+    return success ? Results.Ok(instance) : Results.BadRequest(error);
+});
+
+app.MapPost("/instances/{id}/execute", (string id, string actionId, WorkflowService service) =>
+{
+    var (success, error) = service.ExecuteAction(id, actionId);
+    return success ? Results.Ok("Action executed.") : Results.BadRequest(error);
+});
+
+app.MapGet("/instances/{id}", (string id, WorkflowService service) =>
+{
+    var instance = service.GetInstance(id);
+    return instance is not null ? Results.Ok(instance) : Results.NotFound("Instance not found.");
+});
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
